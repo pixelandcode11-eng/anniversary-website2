@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Netflix Edition</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    body { background-color: #141414; color: #fff; overflow-x: hidden; }
+
+    /* --- START SCREEN FOR AUDIO SYNC --- */
+    #start-screen {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #000;
+      display: flex; justify-content: center; align-items: center; z-index: 3000; cursor: pointer;
+    }
+    .start-prompt { text-align: center; animation: pulsePrompt 1.5s infinite; padding: 0 20px; }
+    .start-prompt h2 { font-size: clamp(2.5rem, 8vw, 4rem); font-weight: 900; color: #e50914; letter-spacing: 4px; margin-bottom: 10px; }
+    .start-prompt p { color: #aaa; font-size: clamp(1rem, 3vw, 1.2rem); letter-spacing: 1px; }
+    @keyframes pulsePrompt { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+
+    /* --- 1. NETFLIX ANIMATED INTRO (canvas) --- */
+    #intro-screen {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #000;
+      display: none; z-index: 2000; overflow: hidden; transition: opacity 0.8s ease;
+    }
+    #intro-canvas { width: 100%; height: 100%; display: block; }
+
+    /* --- 2. WHO'S WATCHING SCREEN --- */
+    #profile-screen {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #141414;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      z-index: 1000; opacity: 0; transition: opacity 0.6s ease; padding: 20px;
+    }
+    .netflix-top-logo { position: absolute; top: 30px; left: 40px; color: #e50914; font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: bold; letter-spacing: 1px; }
+    #profile-screen h1 { font-size: clamp(2rem, 5vw, 3.5rem); margin-bottom: 30px; font-weight: 400; text-align: center; }
+    .profiles-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-bottom: 35px; max-width: 600px; }
+    .profile-card { display: flex; flex-direction: column; align-items: center; cursor: pointer; width: 110px; transition: transform 0.2s ease; }
+    .profile-card:hover { transform: scale(1.08); }
+    .profile-card:hover .profile-avatar { border: 3px solid #fff; }
+    .profile-avatar { width: 100px; height: 100px; border-radius: 8px; object-fit: cover; border: 3px solid transparent; transition: border 0.2s ease; }
+    .profile-name { margin-top: 10px; color: #808080; font-size: 0.95rem; text-align: center; }
+    .profile-card:hover .profile-name { color: #fff; }
+    .manage-btn { border: 1px solid #808080; background: transparent; color: #808080; padding: 8px 22px; font-size: 0.9rem; letter-spacing: 2px; cursor: pointer; transition: all 0.2s ease; }
+    .manage-btn:hover { color: #fff; border-color: #fff; }
+
+    /* --- 3. MAIN DASHBOARD --- */
+    #main-content { display: none; opacity: 0; transition: opacity 0.8s ease; min-height: 100vh; }
+    header { position: fixed; top: 0; width: 100%; padding: 15px 30px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%); z-index: 100; }
+    .nav-brand { color: #e50914; font-weight: bold; font-size: clamp(1.5rem, 3vw, 2rem); text-decoration: none; }
+    .nav-links { display: flex; gap: 20px; list-style: none; }
+    .nav-links a { color: #e5e5e5; text-decoration: none; font-size: 0.9rem; }
+
+    .hero {
+      position: relative; height: 65vh; min-height: 450px; display: flex; align-items: flex-end; padding: 0 5vw 50px 5vw;
+      background: linear-gradient(0deg, #141414 10%, rgba(0,0,0,0.4) 60%),
+                  url('pic3.jpg') center/cover;
+    }
+    .hero-details { max-width: 600px; width: 100%; }
+    .badge { display: inline-block; background-color: #e50914; color: white; font-size: 0.75rem; padding: 3px 6px; font-weight: bold; border-radius: 2px; margin-bottom: 8px; }
+    .hero-title { font-size: clamp(2.2rem, 6vw, 4rem); margin-bottom: 10px; line-height: 1.1; }
+    .meta-info { display: flex; gap: 12px; align-items: center; font-size: 0.9rem; margin-bottom: 12px; color: #46d369; font-weight: bold; }
+    .meta-tag { border: 1px solid #777; padding: 1px 5px; color: #fff; font-size: 0.75rem; }
+    .hero-desc { font-size: clamp(0.9rem, 2vw, 1.05rem); line-height: 1.4; color: #e5e5e5; margin-bottom: 20px; }
+    
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 24px; border-radius: 4px; font-size: 1rem; font-weight: bold; cursor: pointer; border: none; text-decoration: none; width: auto; }
+    .btn-primary { background-color: #fff; color: #000; }
+    .btn-primary:hover { background-color: rgba(255, 255, 255, 0.75); }
+
+    .gallery-section { padding: 20px 0 50px 5vw; }
+    .section-title { font-size: clamp(1.1rem, 2.5vw, 1.3rem); margin-bottom: 15px; color: #e5e5e5; padding-right: 5vw; }
+    
+    /* Horizontal scrolling row for both mobile & desktop */
+    .video-grid {
+      display: flex;
+      gap: 15px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 15px;
+      padding-right: 5vw;
+      scrollbar-width: none; /* Hide scrollbar for clean look */
+    }
+    .video-grid::-webkit-scrollbar { display: none; }
+
+    .video-card {
+      position: relative;
+      background: #2f2f2f;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      flex: 0 0 220px; /* Fixed card width so they stay in one horizontal line */
+      transition: transform 0.3s ease;
+    }
+    .video-card:hover { transform: scale(1.03); z-index: 10; }
+    .video-card img { width: 100%; height: 125px; object-fit: cover; display: block; }
+    .video-card-info { padding: 10px; font-size: 0.85rem; }
+
+    /* --- VIDEO PLAYER MODAL --- */
+    #player-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.95); display: none; justify-content: center; align-items: center; z-index: 3000; padding: 15px; }
+    .close-btn { position: absolute; top: 20px; right: 25px; font-size: 2.2rem; color: #fff; cursor: pointer; z-index: 3100; }
+    #player-video { width: 100%; max-width: 900px; max-height: 80vh; outline: none; border-radius: 4px; }
+
+    /* --- RESPONSIVE MEDIA BREAKPOINTS --- */
+    @media (max-width: 768px) {
+      header { padding: 12px 20px; }
+      .nav-links { display: none; }
+      .netflix-top-logo { top: 20px; left: 20px; }
+      .profiles-container { gap: 15px; }
+      .profile-card { width: 95px; }
+      .profile-avatar { width: 85px; height: 85px; }
+      .profile-name { font-size: 0.85rem; }
+      .hero { height: 60vh; padding-bottom: 40px; }
+      .video-card { flex: 0 0 170px; } /* Slightly narrower cards on small mobile screens so more fit in view */
+      .video-card img { height: 100px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BROWSER AUDIO UNLOCK SCREEN -->
+  <div id="start-screen" onclick="launchExperience()">
+    <div class="start-prompt">
+      <h2>NETFLIX</h2>
+      <p>▶ Click to Start</p>
+    </div>
+  </div>
+
+  <audio id="tudum-audio" src="netflix-tudum-sfx-n-c.mp3" preload="auto"></audio>
+
+  <!-- 1. NETFLIX ANIMATED INTRO -->
+  <div id="intro-screen"><canvas id="intro-canvas"></canvas></div>
+
+  <!-- 2. WHO'S WATCHING SCREEN (PROFILES) -->
+  <div id="profile-screen">
+    <div class="netflix-top-logo">NETFLIX</div>
+    <h1>Who's watching?</h1>
+    <div class="profiles-container">
+      <div class="profile-card" onclick="selectProfile()">
+        <img class="profile-avatar" src="icon3.jpg" alt="Profile">
+        <span class="profile-name">Samir</span>
+      </div>
+      <div class="profile-card" onclick="selectProfile()">
+        <img class="profile-avatar" src="icon2.jpg" alt="Profile">
+        <span class="profile-name">Saleha</span>
+      </div>
+    </div>
+    <button class="manage-btn">MANAGE PROFILES</button>
+  </div>
+
+  <!-- 3. MAIN DASHBOARD -->
+  <div id="main-content">
+    <header>
+      <a href="#" class="nav-brand">NETFLIX</a>
+      <ul class="nav-links">
+        <li><a href="#">Home</a></li>
+        <li><a href="#">Vlogs</a></li>
+        <li><a href="#">TV Shows</a></li>
+        <li><a href="#">Movies</a></li>
+      </ul>
+    </header>
+
+    <div class="hero">
+      <div class="hero-details">
+        <span class="badge">EPISODE 1</span>
+        <h1 class="hero-title">Happy Anniversary, My Love ❤️</h1>
+        <div class="meta-info">
+          <span class="meta-tag">HD</span>
+        </div>
+        <p class="hero-desc">Two hearts, countless memories, a few silly fights, endless love, and a story that's still being written. Our favourite series has no final episode.❤️ </p>
+        <button class="btn btn-primary" onclick="playSpecificVideo('(6).MOV')">▶ Play</button>
+      </div>
+    </div>
+
+    <div class="gallery-section">
+      <h2 class="section-title">Memories &amp; Episodes</h2>
+      <div class="video-grid">
+        <div class="video-card" onclick="playSpecificVideo('(1).MOV')">
+          <img src="pic1.jpg" alt="Episode 1">
+          <div class="video-card-info"><strong>S1: E1 "Happy Anniversary"</strong></div>
+        </div>
+        <div class="video-card" onclick="playSpecificVideo('(2).MOV')">
+          <img src="pic4.jpg" alt="Episode 2">
+          <div class="video-card-info"><strong>S1: E2 "Party Time"</strong></div>
+        </div>
+        <div class="video-card" onclick="playSpecificVideo('(4).MOV')">
+          <img src="pic2.jpg" alt="Episode 3">
+          <div class="video-card-info"><strong>S1: E3 "Where My Hand Belongs"</strong></div>
+        </div>
+        <div class="video-card" onclick="playSpecificVideo('(5).MOV')">
+          <img src="pic5.jpg" alt="Episode 4">
+          <div class="video-card-info"><strong>S1: E4 "Happy Memories"</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIDEO PLAYER MODAL WITH DYNAMIC SOURCE -->
+  <div id="player-overlay">
+    <span class="close-btn" onclick="closeVideo()">&times;</span>
+    <video id="player-video" controls>
+      <source id="video-source" src="" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+  </div>
+
+  <script>
+    const INTRO_END = 6.2;
+    const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+    const smooth = (a, b, x) => { x = clamp((x - a) / (b - a)); return x * x * (3 - 2 * x); };
+    const easeInOut = x => { x = clamp(x); return x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3) / 2; };
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+
+    const PALETTES = {
+      red:    ['#ff1a1a', '#e50914', '#ff3b2f'],
+      darkred: ['#7a0008', '#a30010', '#5c0006'],
+      orange:  ['#ff7a2f', '#ff9a3c', '#ffb347'],
+      yellow:  ['#ffe94d', '#fff27a'],
+      pink:    ['#ff5c8a', '#ff7aa8', '#e84a9a'],
+      white:   ['#ffffff', '#ffe6e0', '#e8f1ff'],
+      blue:    ['#1f6bff', '#2f8bff', '#00b7ff', '#3b3bff'],
+      purple:  ['#7a2cff', '#9b4dff']
+    };
+    function pickColor(u, r) {
+      const x = r();
+      let key;
+      if (u < -0.15)      key = x < .55 ? 'red' : x < .7 ? 'darkred' : x < .85 ? 'orange' : x < .93 ? 'white' : 'yellow';
+      else if (u < 0.12)  key = x < .25 ? 'red' : x < .45 ? 'orange' : x < .65 ? 'pink' : x < .8 ? 'white' : x < .9 ? 'yellow' : 'darkred';
+      else                key = x < .5 ? 'blue' : x < .65 ? 'pink' : x < .75 ? 'purple' : x < .85 ? 'red' : x < .93 ? 'white' : 'darkred';
+      const arr = PALETTES[key];
+      return { key, color: arr[Math.floor(r() * arr.length)] };
+    }
+
+    function buildStrips() {
+      const r = rng(20260);
+      const strips = [];
+      const N = 130;
+      for (let i = 0; i < N; i++) {
+        const u = (i + r() * 0.9) / N - 0.5;
+        const c = pickColor(u, r);
+        strips.push({
+          u, color: c.color, key: c.key,
+          w: 0.0025 + Math.pow(r(), 2.2) * 0.013,
+          bright: 0.55 + r() * 0.45,
+          flick: r() * 6.28,
+          fadeAt: 4.3 + r() * 0.8,
+          keep: (c.key === 'red' || c.key === 'darkred') && r() < 0.5,
+          hOff: r() * 0.25
+        });
+      }
+      return strips;
+    }
+
+    function buildN() {
+      const w = 280, h = 500, cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const c = cv.getContext('2d');
+      const bw = w * 0.285;
+      let g = c.createLinearGradient(0, 0, bw, 0);
+      g.addColorStop(0, '#6e0007'); g.addColorStop(1, '#a8000c');
+      c.fillStyle = g; c.fillRect(0, 0, bw, h);
+      g = c.createLinearGradient(w - bw, 0, w, 0);
+      g.addColorStop(0, '#a8000c'); g.addColorStop(1, '#6e0007');
+      c.fillStyle = g; c.fillRect(w - bw, 0, bw, h);
+      c.fillStyle = 'rgba(0,0,0,0.35)';
+      c.beginPath(); c.moveTo(bw, 0); c.lineTo(bw + w * 0.07, 0); c.lineTo(w - bw + w * 0.01, h); c.lineTo(w - bw - w * 0.06, h); c.closePath(); c.fill();
+      g = c.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, '#ff2a2a'); g.addColorStop(0.5, '#ff0a14'); g.addColorStop(1, '#e00010');
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(0, 0); c.lineTo(bw, 0); c.lineTo(w, h); c.lineTo(w - bw, h); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(255,120,120,0.55)'; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(bw * 0.2, 0); c.lineTo(w - bw * 0.8, h); c.stroke();
+      return cv;
+    }
+
+    let introRAF = null, introStart = 0;
+    const strips = buildStrips();
+    let nCanvas = null;
+    let layer = null, lctx = null;
+
+    function drawIntro(t) {
+      const cv = document.getElementById('intro-canvas');
+      const ctx = cv.getContext('2d');
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const pw = Math.round(vw * dpr), ph = Math.round(vh * dpr);
+      if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
+      if (!layer || layer.width !== pw || layer.height !== ph) {
+        layer = document.createElement('canvas'); layer.width = pw; layer.height = ph;
+        lctx = layer.getContext('2d');
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#030003';
+      ctx.fillRect(0, 0, vw, vh);
+
+      const cx = vw / 2, cy = vh / 2;
+      const nh = Math.min(vh * 0.34, vw * 0.8, 340);
+      const nw = nh * 0.56;
+
+      if (t < 3.5) {
+        const grow = 1 + 0.16 * easeInOut(t / 2.5);
+        const m = easeInOut((t - 2.2) / 1.2);
+        const fadeIn = smooth(0, 0.6, t);
+        const squash = lerp(0.82, 1, clamp(t / 1.0));
+        const H = nh * grow;
+        const W = nw * grow * squash;
+        const COLS = 160;
+        const cw = W / COLS;
+        for (let i = 0; i < COLS; i++) {
+          const sx = (i / COLS) * nCanvas.width;
+          const sw = nCanvas.width / COLS;
+          const u = (i + 0.5) / COLS - 0.5;
+          let a = fadeIn;
+          if (u > 0.2) a *= smooth(0.15, 0.8, t);
+          const stag = clamp((m - Math.abs(u) * 0.3) / 0.7);
+          const colH = lerp(H, vh * 1.05, easeInOut(stag));
+          const spread = 1 + m * m * 0.9;
+          const dx = cx + u * W * spread;
+          const swing = Math.sin(m * Math.PI) * u * H * 0.14;
+          ctx.globalAlpha = a * (1 - smooth(0.35, 1, m));
+          ctx.drawImage(nCanvas, sx, 0, sw, nCanvas.height, dx - cw * 0.75, cy - colH / 2 + swing, cw * 1.5, colH);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      if (t > 2.25) {
+        const sp = easeInOut((t - 2.4) / 2.3);
+        const span = lerp(nw * 1.2, vw * 1.25, sp);
+        const hgt = lerp(nh * 1.15, vh * 1.1, easeInOut((t - 2.3) / 1.1));
+        const lp = lctx;
+        lp.setTransform(dpr, 0, 0, dpr, 0, 0);
+        lp.globalCompositeOperation = 'source-over';
+        lp.clearRect(0, 0, vw, vh);
+        lp.globalCompositeOperation = 'lighter';
+        const tail = 1 - smooth(5.3, 6.0, t);
+        for (const s of strips) {
+          let a = smooth(2.25, 3.2, t) * s.bright;
+          a *= 0.92 + 0.08 * Math.sin(t * 7 + s.flick);
+          const f = smooth(s.fadeAt, s.fadeAt + 0.9, t);
+          a *= s.keep ? lerp(1, 0.3, f) * (f > 0 ? tail : 1) : (1 - f);
+          if (a <= 0.003) continue;
+          const x = cx + s.u * span;
+          const w = Math.max(1.2, s.w * span * (0.7 + sp * 0.6));
+          lp.fillStyle = s.color;
+          lp.globalAlpha = clamp(a * 0.28);
+          lp.fillRect(x - w * 1.8, cy - hgt / 2, w * 3.6, hgt);
+          lp.globalAlpha = clamp(a);
+          lp.fillRect(x - w / 2, cy - hgt / 2, w, hgt);
+        }
+        lp.globalAlpha = 1;
+        lp.globalCompositeOperation = 'destination-in';
+        const g = lp.createLinearGradient(0, cy - hgt / 2, 0, cy + hgt / 2);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(0.1, 'rgba(0,0,0,1)');
+        g.addColorStop(0.9, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        lp.fillStyle = g;
+        lp.fillRect(0, 0, vw, vh);
+        lp.globalCompositeOperation = 'source-over';
+
+        ctx.globalAlpha = 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(layer, 0, 0);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+    }
+
+    function runIntro(onDone) {
+      nCanvas = nCanvas || buildN();
+      introStart = performance.now();
+      const loop = now => {
+        const t = (now - introStart) / 1000;
+        drawIntro(t);
+        if (t < INTRO_END) introRAF = requestAnimationFrame(loop);
+        else onDone();
+      };
+      introRAF = requestAnimationFrame(loop);
+    }
+
+    let actx = null;
+    function noiseBurst(ctx, when, dur, f0, f1, vol) {
+      const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+      bp.frequency.setValueAtTime(f0, when);
+      bp.frequency.exponentialRampToValueAtTime(f1, when + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(vol, when + dur * 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+      src.start(when); src.stop(when + dur);
+    }
+    function tone(ctx, when, type, f0, f1, dur, vol) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, when);
+      o.frequency.exponentialRampToValueAtTime(f1, when + dur);
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(vol, when + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(when); o.stop(when + dur + 0.05);
+    }
+    function playTudumSound() {
+      try {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        const t0 = actx.currentTime;
+        tone(actx, t0 + 0.05, 'sine', 55, 70, 2.0, 0.35);
+        tone(actx, t0 + 2.1, 'sawtooth', 110, 38, 0.5, 0.7);
+        tone(actx, t0 + 2.1, 'sine', 70, 35, 0.6, 0.9);
+        tone(actx, t0 + 2.4, 'sine', 220, 110, 1.1, 0.6);
+        tone(actx, t0 + 2.3, 'triangle', 330, 165, 1.0, 0.25);
+        noiseBurst(actx, t0 + 2.3, 2.6, 400, 6000, 0.35);
+        noiseBurst(actx, t0 + 3.9, 2.0, 3000, 500, 0.15);
+      } catch (e) { console.log('Audio context blocked'); }
+    }
+
+    function launchExperience() {
+      document.getElementById('start-screen').style.display = 'none';
+      const intro = document.getElementById('intro-screen');
+      intro.style.opacity = '1';
+      intro.style.display = 'block';
+      const audio = document.getElementById('tudum-audio');
+      audio.currentTime = 0;
+      audio.play().catch(() => playTudumSound());
+      runIntro(() => {
+        intro.style.opacity = '0';
+        setTimeout(() => {
+          intro.style.display = 'none';
+          document.getElementById('profile-screen').style.opacity = '1';
+        }, 800);
+      });
+    }
+
+    function selectProfile() {
+      const profileScreen = document.getElementById('profile-screen');
+      const mainContent = document.getElementById('main-content');
+      profileScreen.style.opacity = '0';
+      setTimeout(() => {
+        profileScreen.style.display = 'none';
+        mainContent.style.display = 'block';
+        setTimeout(() => { mainContent.style.opacity = '1'; }, 50);
+      }, 500);
+    }
+
+    function playSpecificVideo(videoFile) {
+      const videoEl = document.getElementById('player-video');
+      const sourceEl = document.getElementById('video-source');
+      sourceEl.src = videoFile;
+      videoEl.load();
+      videoEl.play();
+      document.getElementById('player-overlay').style.display = "flex";
+    }
+
+    function closeVideo() {
+      const videoEl = document.getElementById('player-video');
+      videoEl.pause();
+      videoEl.currentTime = 0;
+      document.getElementById('player-overlay').style.display = "none";
+    }
+  </script>
+</body>
+</html>
